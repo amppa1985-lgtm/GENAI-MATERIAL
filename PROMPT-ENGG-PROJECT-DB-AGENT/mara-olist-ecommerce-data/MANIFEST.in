@@ -1,2 +1,0 @@
-include olist_ecommerce/*.sql
-recursive-include data *
