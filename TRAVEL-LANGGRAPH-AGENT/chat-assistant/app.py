@@ -128,10 +128,10 @@ async def handle_message(message: cl.Message):
         await cl.Message(content="⚠️ Agent service unavailable. Please check your ECS logs.").send()
 
 async def process_agent_response(res_data):
-    """Analyzes graph state and renders UI elements"""
+    """Analyzes graph state and renders high-quality UI elements"""
     thread_id = cl.user_session.get("thread_id")
 
-    # Handle Flight Selection via Buttons
+    # 1. Handle Flight Selection via Buttons
     if "flight_options" in res_data and not res_data.get("selected_flight_price"):
         actions = [
             cl.Action(
@@ -147,20 +147,53 @@ async def process_agent_response(res_data):
             actions=actions
         ).send()
 
-    # Handle Budget Deficit
+    # 2. Handle Budget Deficit
     elif res_data.get("remaining_budget", 0) < 0:
         logger.warning(f"Thread {thread_id} is over budget.")
         await cl.Message(
             content=f"❌ **Budget Alert!**\nYou are over budget by **${abs(res_data['remaining_budget'])}**.\n\nPlease type a new **Total Budget** to continue."
         ).send()
 
-    # Handle Final Success
+    # 3. Handle Final Success & Activity Display
     elif res_data.get("activities"):
-        content = f"✅ **Trip Planned Successfully!**\n\n"
-        content += f"**Destination:** {res_data.get('destination_iata', 'Success')}\n"
-        content += f"**Budget Remaining:** ${res_data.get('remaining_budget', 0)}\n\n"
-        content += f"**Top Activities:**\n{res_data['activities'][0]}"
-        await cl.Message(content=content).send()
+        # Format the header
+        destination = res_data.get('destination_iata', 'your destination')
+        remaining = res_data.get('remaining_budget', 0)
+        
+        header_content = (
+            f"✅ **Trip Planned Successfully for {destination}!**\n"
+            f"💰 **Budget Remaining:** ${remaining:.2f}\n\n"
+            f"--- \n### 🏛️ Recommended Activities\n"
+        )
+        await cl.Message(content=header_content).send()
+
+        # Iterate through activities and send them as clean cards
+        # We take the first 5 to keep the chat clean
+        activities = res_data["activities"]
+        if isinstance(activities, list) and len(activities) > 0:
+            # If the activities are nested in another list (as seen in your snippet)
+            if isinstance(activities[0], list):
+                activities = activities[0]
+
+            for act in activities[:5]: 
+                price_info = act.get('price', 'Free')
+                rating = f"⭐ {act.get('rating', 'N/A')} ({act.get('reviews', 0)} reviews)"
+                
+                activity_card = (
+                    f"**{act.get('title')}**\n"
+                    f"{rating} | 💳 {price_info}\n"
+                    f"[View on Google Maps]({act.get('link')})"
+                )
+                
+                # If there's a thumbnail, we can display it
+                image = None
+                if act.get('thumbnail'):
+                    image = cl.Image(url=act.get('thumbnail'), name=act.get('title'), display="inline")
+
+                await cl.Message(
+                    content=activity_card,
+                    elements=[image] if image else []
+                ).send()
 
 @cl.action_callback("select_flight")
 async def on_action(action: cl.Action):
