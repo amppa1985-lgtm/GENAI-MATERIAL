@@ -6,3 +6,4 @@ langchain-community
 google-search-results
 requests
 python-dotenv
+python-dateutil
